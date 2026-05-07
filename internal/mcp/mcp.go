@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/Gentleman-Programming/engram/internal/diagnostic"
+	"github.com/Gentleman-Programming/engram/internal/profile"
 	projectpkg "github.com/Gentleman-Programming/engram/internal/project"
 	"github.com/Gentleman-Programming/engram/internal/store"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -49,6 +50,13 @@ type MCPConfig struct {
 	// mem_save call (REQ-001). nil means "use the store default" (3).
 	// An explicit pointer value (including 0) is forwarded directly.
 	Limit *int
+
+	// Profile selects the audience profile for this MCP server instance.
+	// When set, its ServerInstructions replace the package-level const,
+	// its ToolDescriptions override per-tool registration strings, and its
+	// AllowedTypes gate the soft type-warning in handleSave.
+	// nil means "use dev profile defaults" (backward compatible).
+	Profile *profile.Profile
 }
 
 var suggestTopicKey = store.SuggestTopicKey
@@ -224,11 +232,18 @@ func NewServerWithConfig(s *store.Store, cfg MCPConfig, allowlist map[string]boo
 }
 
 func newServerWithActivity(s *store.Store, cfg MCPConfig, allowlist map[string]bool, activity *SessionActivity) *server.MCPServer {
+	// Use the profile's ServerInstructions when a profile is set; fall back to
+	// the package-level const to preserve backward compatibility when Profile is nil.
+	instructions := serverInstructions
+	if cfg.Profile != nil && cfg.Profile.ServerInstructions != "" {
+		instructions = cfg.Profile.ServerInstructions
+	}
+
 	srv := server.NewMCPServer(
 		"engram",
 		"0.1.0",
 		server.WithToolCapabilities(true),
-		server.WithInstructions(serverInstructions),
+		server.WithInstructions(instructions),
 	)
 
 	registerTools(srv, s, cfg, allowlist, activity)
@@ -244,6 +259,19 @@ func shouldRegister(name string, allowlist map[string]bool) bool {
 	return allowlist[name]
 }
 
+// toolDescription returns the description string for a named tool.
+// If cfg.Profile has an override for the tool name it is returned; otherwise
+// the provided default string is used. This keeps the override check in one
+// place and avoids repetition across every tool registration call.
+func toolDescription(cfg MCPConfig, toolName, defaultDesc string) string {
+	if cfg.Profile != nil && cfg.Profile.ToolDescriptions != nil {
+		if override, ok := cfg.Profile.ToolDescriptions[toolName]; ok && override != "" {
+			return override
+		}
+	}
+	return defaultDesc
+}
+
 func registerTools(srv *server.MCPServer, s *store.Store, cfg MCPConfig, allowlist map[string]bool, activity *SessionActivity) {
 	writeQueue := newWriteQueue(defaultMCPWriteQueueSize)
 
@@ -251,7 +279,7 @@ func registerTools(srv *server.MCPServer, s *store.Store, cfg MCPConfig, allowli
 	if shouldRegister("mem_search", allowlist) {
 		srv.AddTool(
 			mcp.NewTool("mem_search",
-				mcp.WithDescription("Search your persistent memory across all sessions. Use this to find past decisions, bugs fixed, patterns used, files changed, or any context from previous coding sessions."),
+				mcp.WithDescription(toolDescription(cfg, "mem_search", "Search your persistent memory across all sessions. Use this to find past decisions, bugs fixed, patterns used, files changed, or any context from previous coding sessions.")),
 				mcp.WithTitleAnnotation("Search Memory"),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -280,14 +308,7 @@ func registerTools(srv *server.MCPServer, s *store.Store, cfg MCPConfig, allowli
 
 	// ─── mem_save (profile: agent, core — always in context) ───────────
 	if shouldRegister("mem_save", allowlist) {
-		srv.AddTool(
-			mcp.NewTool("mem_save",
-				mcp.WithTitleAnnotation("Save Memory"),
-				mcp.WithReadOnlyHintAnnotation(false),
-				mcp.WithDestructiveHintAnnotation(false),
-				mcp.WithIdempotentHintAnnotation(false),
-				mcp.WithOpenWorldHintAnnotation(false),
-				mcp.WithDescription(`Save an important observation to persistent memory. Call this PROACTIVELY after completing significant work — don't wait to be asked.
+		const memSaveDefaultDesc = `Save an important observation to persistent memory. Call this PROACTIVELY after completing significant work — don't wait to be asked.
 
 WHEN to save (call this after each of these):
 - Architectural decisions or tradeoffs
@@ -312,7 +333,15 @@ Examples:
 
   title: "Fixed FTS5 syntax error on special chars"
   type: "bugfix"
-  content: "**What**: Wrapped each search term in quotes before passing to FTS5 MATCH\n**Why**: Users typing queries like 'fix auth bug' would crash because FTS5 interprets special chars as operators\n**Where**: internal/store/store.go — sanitizeFTS() function\n**Learned**: FTS5 MATCH syntax is NOT the same as LIKE — always sanitize user input"`),
+  content: "**What**: Wrapped each search term in quotes before passing to FTS5 MATCH\n**Why**: Users typing queries like 'fix auth bug' would crash because FTS5 interprets special chars as operators\n**Where**: internal/store/store.go — sanitizeFTS() function\n**Learned**: FTS5 MATCH syntax is NOT the same as LIKE — always sanitize user input"`
+		srv.AddTool(
+			mcp.NewTool("mem_save",
+				mcp.WithTitleAnnotation("Save Memory"),
+				mcp.WithReadOnlyHintAnnotation(false),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithIdempotentHintAnnotation(false),
+				mcp.WithOpenWorldHintAnnotation(false),
+				mcp.WithDescription(toolDescription(cfg, "mem_save", memSaveDefaultDesc)),
 				mcp.WithString("title",
 					mcp.Required(),
 					mcp.Description("Short, searchable title (e.g. 'JWT auth middleware', 'Fixed N+1 query')"),
@@ -1116,6 +1145,17 @@ func handleSave(s *store.Store, cfg MCPConfig, activity *SessionActivity) server
 		// Post-transaction conflict candidate detection (REQ-001).
 		// Errors are logged and swallowed — detection failure never fails the save.
 		extra := map[string]any{}
+
+		// Soft type validation: if the profile has AllowedTypes and the saved type
+		// is not in the list, add a type_warning to the response metadata.
+		// The save has already succeeded — this is informational guidance only.
+		if cfg.Profile != nil && !cfg.Profile.HasType(typ) {
+			extra["type_warning"] = fmt.Sprintf(
+				"Type %q is not in profile %q allowed types. Save succeeded — this is informational.",
+				typ, cfg.Profile.Name,
+			)
+			msg += fmt.Sprintf("\nNote: type %q is outside profile %q suggested types.", typ, cfg.Profile.Name)
+		}
 		// Build CandidateOptions, forwarding any MCPConfig overrides.
 		// nil fields mean "use store defaults"; explicit pointer values override.
 		candOpts := store.CandidateOptions{

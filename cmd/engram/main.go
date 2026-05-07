@@ -34,6 +34,7 @@ import (
 	"github.com/Gentleman-Programming/engram/internal/diagnostic"
 	"github.com/Gentleman-Programming/engram/internal/mcp"
 	"github.com/Gentleman-Programming/engram/internal/obsidian"
+	"github.com/Gentleman-Programming/engram/internal/profile"
 	"github.com/Gentleman-Programming/engram/internal/project"
 	"github.com/Gentleman-Programming/engram/internal/server"
 	"github.com/Gentleman-Programming/engram/internal/setup"
@@ -830,15 +831,29 @@ func tryStartAutosync(ctx context.Context, s *store.Store, cfg store.Config) (au
 }
 
 func cmdMCP(cfg store.Config) {
-	// Parse --tools flag. Project is always auto-detected from cwd at call time (JR2-4).
+	// Parse --tools and --profile flags.
+	// Project is always auto-detected from cwd at call time (JR2-4).
 	toolsFilter := ""
+	profileName := "dev" // default profile — preserves backward compatibility
 	for i := 2; i < len(os.Args); i++ {
 		if strings.HasPrefix(os.Args[i], "--tools=") {
 			toolsFilter = strings.TrimPrefix(os.Args[i], "--tools=")
 		} else if os.Args[i] == "--tools" && i+1 < len(os.Args) {
 			toolsFilter = os.Args[i+1]
 			i++
+		} else if strings.HasPrefix(os.Args[i], "--profile=") {
+			profileName = strings.TrimPrefix(os.Args[i], "--profile=")
+		} else if os.Args[i] == "--profile" && i+1 < len(os.Args) {
+			profileName = os.Args[i+1]
+			i++
 		}
+	}
+
+	prof, err := profile.Get(profileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "engram: invalid --profile=%q: %v\n", profileName, err)
+		fmt.Fprintln(os.Stderr, "Valid profiles: "+strings.Join(profile.List(), ", "))
+		exitFunc(1)
 	}
 
 	s, err := storeNew(cfg)
@@ -865,7 +880,7 @@ func cmdMCP(cfg store.Config) {
 	}
 	defer stopAutosync()
 
-	mcpCfg := mcp.MCPConfig{}
+	mcpCfg := mcp.MCPConfig{Profile: prof}
 	allowlist := resolveMCPTools(toolsFilter)
 	mcpSrv := newMCPServerWithConfig(s, mcpCfg, allowlist)
 
@@ -2156,9 +2171,20 @@ func cmdProjectsPrune(cfg store.Config) {
 func cmdSetup() {
 	agents := setupSupportedAgents()
 
-	// If agent name given directly: engram setup opencode
+	// Parse --profile= flag from any position in the args.
+	setupProfileName := ""
+	for i := 2; i < len(os.Args); i++ {
+		if strings.HasPrefix(os.Args[i], "--profile=") {
+			setupProfileName = strings.TrimPrefix(os.Args[i], "--profile=")
+		} else if os.Args[i] == "--profile" && i+1 < len(os.Args) {
+			setupProfileName = os.Args[i+1]
+			i++
+		}
+	}
+
+	// If agent name given directly: engram setup opencode [--profile=<name>]
 	if len(os.Args) > 2 && !strings.HasPrefix(os.Args[2], "-") {
-		result, err := setupInstallAgent(os.Args[2])
+		result, err := setupInstallAgent(os.Args[2], setupProfileName)
 		if err != nil {
 			fatal(err)
 		}
@@ -2192,7 +2218,7 @@ func cmdSetup() {
 	selected := agents[choice-1]
 	fmt.Printf("\nInstalling %s plugin...\n", selected.Name)
 
-	result, err := setupInstallAgent(selected.Name)
+	result, err := setupInstallAgent(selected.Name, setupProfileName)
 	if err != nil {
 		fatal(err)
 	}
@@ -2245,6 +2271,11 @@ func printPostInstall(result *setup.Result) {
 		fmt.Println("  1. Restart Codex so MCP config is reloaded")
 		fmt.Println("  2. Verify ~/.codex/config.toml has [mcp_servers.engram]")
 		fmt.Println("  3. Verify model_instructions_file + experimental_compact_prompt_file are set")
+	case "claude-desktop":
+		fmt.Println("\nNext steps:")
+		fmt.Println("  1. Restart Claude Desktop — the MCP server will load on next start")
+		fmt.Println("  2. Verify ~/Library/Application Support/Claude/claude_desktop_config.json contains mcpServers.engram")
+		fmt.Println("  3. Re-run 'engram setup claude-desktop' if you move the engram binary")
 	}
 }
 
@@ -2258,11 +2289,14 @@ Usage:
 
 Commands:
   serve [port]       Start HTTP API server (default: 7437)
-  mcp [--tools=PROFILE]
+  mcp [--tools=PROFILE] [--profile=NAME]
                      Start MCP server (stdio transport, for any AI agent)
-                       Profiles: agent (15 tools), admin (4 tools), all (default, 19)
-                       Combine: --tools=agent,admin or pick individual tools
+                       --tools:   agent (15 tools), admin (4 tools), all (default, 19)
+                                  Combine: --tools=agent,admin or pick individual tools
+                       --profile: dev (default), second-brain, all
+                                  Selects server instructions and type vocabulary
                        Example: engram mcp --tools=agent
+                       Example: engram mcp --profile=second-brain --tools=agent
   tui                Launch interactive terminal UI
   search <query>     Search memories [--type TYPE] [--project PROJECT] [--scope SCOPE] [--limit N]
   save <title> <msg> Save a memory  [--type TYPE] [--project PROJECT] [--scope SCOPE]
@@ -2285,7 +2319,11 @@ Commands:
                      Merge similar project names into one canonical name
                        --all      Scan ALL projects for similar name groups
                        --dry-run  Preview what would be merged (no changes)
-  setup [agent]      Install/setup agent integration (opencode, claude-code, gemini-cli, codex)
+  setup [agent] [--profile=NAME]
+                     Install/setup agent integration
+                       Agents: opencode, claude-code, gemini-cli, codex, claude-desktop
+                       --profile: pass a profile name to bake into the generated config
+                       Example: engram setup claude-desktop --profile=second-brain
   sync               Export new memories as compressed chunk to .engram/
                          --import   Import new chunks from .engram/ into local DB
                          --status   Show sync status

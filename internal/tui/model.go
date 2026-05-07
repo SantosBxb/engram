@@ -227,7 +227,9 @@ func loadSessionObservations(s *store.Store, sessionID string) tea.Cmd {
 
 func installAgent(agentName string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := installAgentFn(agentName)
+		// TUI setup always uses the default profile ("dev") — profile selection
+		// is only available via the CLI --profile= flag.
+		result, err := installAgentFn(agentName, "")
 		return setupInstallMsg{result: result, err: err}
 	}
 }

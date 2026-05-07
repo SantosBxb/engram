@@ -713,7 +713,7 @@ func TestHandleSessionsAndSetupRemainingBranches(t *testing.T) {
 
 	original := installAgentFn
 	t.Cleanup(func() { installAgentFn = original })
-	installAgentFn = func(name string) (*setup.Result, error) {
+	installAgentFn = func(name string, _ string) (*setup.Result, error) {
 		return &setup.Result{Agent: name, Destination: "/tmp", Files: 1}, nil
 	}
 

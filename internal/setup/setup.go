@@ -250,11 +250,18 @@ func SupportedAgents() []Agent {
 			Description: "Codex — MCP registration plus model/compaction instruction files",
 			InstallDir:  codexConfigPath(),
 		},
+		{
+			Name:        "claude-desktop",
+			Description: "Claude Desktop — writes MCP config to ~/Library/Application Support/Claude/claude_desktop_config.json",
+			InstallDir:  claudeDesktopConfigPath(),
+		},
 	}
 }
 
 // Install installs the plugin for the given agent.
-func Install(agentName string) (*Result, error) {
+// profileName is optional — pass "" or "dev" for the default behavior.
+// For claude-desktop, profileName influences the generated server command.
+func Install(agentName string, profileName string) (*Result, error) {
 	switch agentName {
 	case "opencode":
 		return installOpenCode()
@@ -264,8 +271,10 @@ func Install(agentName string) (*Result, error) {
 		return installGeminiCLI()
 	case "codex":
 		return installCodex()
+	case "claude-desktop":
+		return installClaudeDesktop(profileName)
 	default:
-		return nil, fmt.Errorf("unknown agent: %q (supported: opencode, claude-code, gemini-cli, codex)", agentName)
+		return nil, fmt.Errorf("unknown agent: %q (supported: opencode, claude-code, gemini-cli, codex, claude-desktop)", agentName)
 	}
 }
 
@@ -1045,6 +1054,103 @@ func upsertTopLevelTOMLString(content, key, value string) string {
 	out = append(out, cleaned[insertAt:]...)
 
 	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+}
+
+// ─── Claude Desktop ──────────────────────────────────────────────────────────
+
+// claudeDesktopConfigPath returns the path to the Claude Desktop MCP config file.
+// macOS-only for v1; returns an empty string on other platforms.
+func claudeDesktopConfigPath() string {
+	if runtimeGOOS != "darwin" {
+		return ""
+	}
+	home, _ := userHomeDir()
+	return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+}
+
+// installClaudeDesktop writes the Claude Desktop MCP config file at
+// ~/Library/Application Support/Claude/claude_desktop_config.json.
+//
+// It merges with any existing config — only the "mcpServers.engram" key is
+// added or updated; unrelated entries are preserved.
+//
+// When profileName is non-empty and not "dev", the generated server args
+// include --profile=<profileName> so Claude Desktop starts with the correct profile.
+func installClaudeDesktop(profileName string) (*Result, error) {
+	if runtimeGOOS != "darwin" {
+		return nil, fmt.Errorf("claude-desktop setup is only supported on macOS (current OS: %s)", runtimeGOOS)
+	}
+
+	configPath := claudeDesktopConfigPath()
+
+	// Ensure the parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		return nil, fmt.Errorf("create Claude config dir: %w", err)
+	}
+
+	// Read existing config (or start with an empty object).
+	var config map[string]json.RawMessage
+	data, err := readFileFn(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			config = make(map[string]json.RawMessage)
+		} else {
+			return nil, fmt.Errorf("read claude_desktop_config.json: %w", err)
+		}
+	} else {
+		if err := json.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("parse claude_desktop_config.json: %w", err)
+		}
+	}
+
+	// Parse or create the "mcpServers" block.
+	var mcpServers map[string]json.RawMessage
+	if raw, exists := config["mcpServers"]; exists {
+		if err := json.Unmarshal(raw, &mcpServers); err != nil {
+			return nil, fmt.Errorf("parse mcpServers block: %w", err)
+		}
+	} else {
+		mcpServers = make(map[string]json.RawMessage)
+	}
+
+	// Build the engram server entry.
+	cmd := resolveEngramCommand()
+	args := []string{"mcp", "--tools=agent"}
+	if profileName != "" && profileName != "dev" {
+		args = append(args, "--profile="+profileName)
+	}
+	engramEntry := map[string]any{
+		"command": cmd,
+		"args":    args,
+	}
+	entryJSON, err := jsonMarshalIndentFn(engramEntry, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal engram entry: %w", err)
+	}
+	mcpServers["engram"] = json.RawMessage(entryJSON)
+
+	// Write mcpServers back into the top-level config.
+	mcpJSON, err := jsonMarshalFn(mcpServers)
+	if err != nil {
+		return nil, fmt.Errorf("marshal mcpServers block: %w", err)
+	}
+	config["mcpServers"] = json.RawMessage(mcpJSON)
+
+	// Write config back with indentation.
+	output, err := jsonMarshalIndentFn(config, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal claude_desktop_config.json: %w", err)
+	}
+
+	if err := writeFileFn(configPath, output, 0644); err != nil {
+		return nil, fmt.Errorf("write claude_desktop_config.json: %w", err)
+	}
+
+	return &Result{
+		Agent:       "claude-desktop",
+		Destination: configPath,
+		Files:       1,
+	}, nil
 }
 
 // ─── Platform paths ──────────────────────────────────────────────────────────

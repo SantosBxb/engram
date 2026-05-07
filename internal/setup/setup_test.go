@@ -103,7 +103,7 @@ func TestInstallGeminiCLIInjectsMCPConfig(t *testing.T) {
 		t.Fatalf("write initial settings: %v", err)
 	}
 
-	result, err := Install("gemini-cli")
+	result, err := Install("gemini-cli", "")
 	if err != nil {
 		t.Fatalf("install gemini-cli: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestInstallGeminiCLIInjectsMCPConfig(t *testing.T) {
 		}
 	}
 
-	if _, err := Install("gemini-cli"); err != nil {
+	if _, err := Install("gemini-cli", ""); err != nil {
 		t.Fatalf("second install should be idempotent: %v", err)
 	}
 }
@@ -209,7 +209,7 @@ func TestInstallCodexInjectsTOMLAndIsIdempotent(t *testing.T) {
 		t.Fatalf("write initial config: %v", err)
 	}
 
-	result, err := Install("codex")
+	result, err := Install("codex", "")
 	if err != nil {
 		t.Fatalf("install codex: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestInstallCodexInjectsTOMLAndIsIdempotent(t *testing.T) {
 
 	first := readAndAssert()
 
-	if _, err := Install("codex"); err != nil {
+	if _, err := Install("codex", ""); err != nil {
 		t.Fatalf("second install should be idempotent: %v", err)
 	}
 
@@ -298,7 +298,7 @@ func TestInstallCodexInjectsTOMLAndIsIdempotent(t *testing.T) {
 
 func TestInstallUnknownAgent(t *testing.T) {
 	resetSetupSeams(t)
-	_, err := Install("unknown")
+	_, err := Install("unknown", "")
 	if err == nil || !strings.Contains(err.Error(), "unknown agent") {
 		t.Fatalf("expected unknown agent error, got %v", err)
 	}
@@ -1579,7 +1579,7 @@ func TestInstallRoutesForOpenCodeAndClaude(t *testing.T) {
 		runtimeGOOS = "linux"
 		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
 
-		result, err := Install("opencode")
+		result, err := Install("opencode", "")
 		if err != nil {
 			t.Fatalf("Install(opencode) failed: %v", err)
 		}
@@ -1595,7 +1595,7 @@ func TestInstallRoutesForOpenCodeAndClaude(t *testing.T) {
 		runCommand = func(string, ...string) ([]byte, error) { return []byte("ok"), nil }
 		writeClaudeCodeUserMCPFn = func() error { return nil }
 
-		result, err := Install("claude-code")
+		result, err := Install("claude-code", "")
 		if err != nil {
 			t.Fatalf("Install(claude-code) failed: %v", err)
 		}
@@ -2902,5 +2902,243 @@ func TestPluginSubAgentFiltering(t *testing.T) {
 	// session.deleted must clean up subAgentSessions too
 	if !strings.Contains(content, `subAgentSessions.delete(sessionId)`) {
 		t.Fatalf("session.deleted handler must clean up subAgentSessions set")
+	}
+}
+
+// ─── Claude Desktop ───────────────────────────────────────────────────────────
+
+func TestInstallClaudeDesktop_WritesConfigFile(t *testing.T) {
+	resetSetupSeams(t)
+	runtimeGOOS = "darwin"
+
+	home := useTestHome(t)
+	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
+
+	result, err := installClaudeDesktop("")
+	if err != nil {
+		t.Fatalf("installClaudeDesktop: %v", err)
+	}
+
+	configPath := filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+	if result.Destination != configPath {
+		t.Errorf("Result.Destination = %q, want %q", result.Destination, configPath)
+	}
+	if result.Agent != "claude-desktop" {
+		t.Errorf("Result.Agent = %q, want \"claude-desktop\"", result.Agent)
+	}
+	if result.Files != 1 {
+		t.Errorf("Result.Files = %d, want 1", result.Files)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read written config: %v", err)
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("parse written config: %v", err)
+	}
+
+	rawMCP, ok := config["mcpServers"]
+	if !ok {
+		t.Fatalf("written config missing \"mcpServers\" key")
+	}
+
+	var mcpServers map[string]json.RawMessage
+	if err := json.Unmarshal(rawMCP, &mcpServers); err != nil {
+		t.Fatalf("parse mcpServers: %v", err)
+	}
+
+	rawEngram, ok := mcpServers["engram"]
+	if !ok {
+		t.Fatalf("mcpServers missing \"engram\" key")
+	}
+
+	var engramEntry map[string]any
+	if err := json.Unmarshal(rawEngram, &engramEntry); err != nil {
+		t.Fatalf("parse engram entry: %v", err)
+	}
+
+	if engramEntry["command"] != "/usr/local/bin/engram" {
+		t.Errorf("engram command = %v, want \"/usr/local/bin/engram\"", engramEntry["command"])
+	}
+}
+
+func TestInstallClaudeDesktop_WithSecondBrainProfile_IncludesProfileArg(t *testing.T) {
+	resetSetupSeams(t)
+	runtimeGOOS = "darwin"
+
+	useTestHome(t)
+	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
+
+	result, err := installClaudeDesktop("second-brain")
+	if err != nil {
+		t.Fatalf("installClaudeDesktop(second-brain): %v", err)
+	}
+
+	data, err := os.ReadFile(result.Destination)
+	if err != nil {
+		t.Fatalf("read written config: %v", err)
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+
+	var mcpServers map[string]json.RawMessage
+	if err := json.Unmarshal(config["mcpServers"], &mcpServers); err != nil {
+		t.Fatalf("parse mcpServers: %v", err)
+	}
+
+	var engramEntry map[string]any
+	if err := json.Unmarshal(mcpServers["engram"], &engramEntry); err != nil {
+		t.Fatalf("parse engram entry: %v", err)
+	}
+
+	// args must include --profile=second-brain
+	rawArgs, _ := json.Marshal(engramEntry["args"])
+	argsStr := string(rawArgs)
+	if !strings.Contains(argsStr, "--profile=second-brain") {
+		t.Errorf("engram args %s should include \"--profile=second-brain\"", argsStr)
+	}
+}
+
+func TestInstallClaudeDesktop_PreservesExistingEntries(t *testing.T) {
+	resetSetupSeams(t)
+	runtimeGOOS = "darwin"
+
+	home := useTestHome(t)
+	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
+
+	// Pre-create config with an existing unrelated MCP entry
+	configPath := filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	existing := `{"mcpServers":{"other-tool":{"command":"other","args":["start"]}},"theme":"dark"}`
+	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write initial config: %v", err)
+	}
+
+	if _, err := installClaudeDesktop(""); err != nil {
+		t.Fatalf("installClaudeDesktop: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+
+	// Existing "theme" key must be preserved
+	if _, ok := config["theme"]; !ok {
+		t.Error("existing top-level key \"theme\" was removed")
+	}
+
+	var mcpServers map[string]json.RawMessage
+	if err := json.Unmarshal(config["mcpServers"], &mcpServers); err != nil {
+		t.Fatalf("parse mcpServers: %v", err)
+	}
+
+	// Existing "other-tool" entry must be preserved
+	if _, ok := mcpServers["other-tool"]; !ok {
+		t.Error("existing mcpServers entry \"other-tool\" was removed")
+	}
+
+	// "engram" entry must have been added
+	if _, ok := mcpServers["engram"]; !ok {
+		t.Error("mcpServers missing new \"engram\" entry")
+	}
+}
+
+func TestInstallClaudeDesktop_DefaultProfile_NoProfileArg(t *testing.T) {
+	resetSetupSeams(t)
+	runtimeGOOS = "darwin"
+
+	useTestHome(t)
+	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
+
+	result, err := installClaudeDesktop("dev")
+	if err != nil {
+		t.Fatalf("installClaudeDesktop(dev): %v", err)
+	}
+
+	data, err := os.ReadFile(result.Destination)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	var config map[string]json.RawMessage
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+
+	var mcpServers map[string]json.RawMessage
+	if err := json.Unmarshal(config["mcpServers"], &mcpServers); err != nil {
+		t.Fatalf("parse mcpServers: %v", err)
+	}
+
+	var engramEntry map[string]any
+	if err := json.Unmarshal(mcpServers["engram"], &engramEntry); err != nil {
+		t.Fatalf("parse engram entry: %v", err)
+	}
+
+	// With profileName="dev", --profile= flag must NOT be added
+	rawArgs, _ := json.Marshal(engramEntry["args"])
+	argsStr := string(rawArgs)
+	if strings.Contains(argsStr, "--profile=") {
+		t.Errorf("dev profile should not add --profile= flag; args: %s", argsStr)
+	}
+}
+
+func TestInstallClaudeDesktop_NonDarwin_ReturnsError(t *testing.T) {
+	resetSetupSeams(t)
+	runtimeGOOS = "linux"
+
+	_, err := installClaudeDesktop("")
+	if err == nil {
+		t.Fatal("expected error on non-darwin platform, got nil")
+	}
+	if !strings.Contains(err.Error(), "macOS") {
+		t.Errorf("error message should mention macOS; got: %v", err)
+	}
+}
+
+func TestSupportedAgents_IncludesClaudeDesktop(t *testing.T) {
+	agents := SupportedAgents()
+
+	var found bool
+	for _, agent := range agents {
+		if agent.Name == "claude-desktop" {
+			found = true
+			if agent.Description == "" {
+				t.Error("claude-desktop agent description is empty")
+			}
+		}
+	}
+	if !found {
+		t.Error("SupportedAgents() does not include \"claude-desktop\"")
+	}
+}
+
+func TestInstall_ClaudeDesktop_RoutesThroughInstall(t *testing.T) {
+	resetSetupSeams(t)
+	runtimeGOOS = "darwin"
+
+	useTestHome(t)
+	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
+
+	result, err := Install("claude-desktop", "second-brain")
+	if err != nil {
+		t.Fatalf("Install(claude-desktop, second-brain): %v", err)
+	}
+	if result.Agent != "claude-desktop" {
+		t.Errorf("result.Agent = %q, want \"claude-desktop\"", result.Agent)
 	}
 }

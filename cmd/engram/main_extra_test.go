@@ -2258,7 +2258,7 @@ func TestCmdSetupDirectAndInteractive(t *testing.T) {
 	stubRuntimeHooks(t)
 	stubExitWithPanic(t)
 
-	setupInstallAgent = func(agent string) (*setup.Result, error) {
+	setupInstallAgent = func(agent string, _ string) (*setup.Result, error) {
 		if agent == "broken" {
 			return nil, errors.New("install failed")
 		}
@@ -2489,7 +2489,7 @@ func TestMainDispatchRemainingCommands(t *testing.T) {
 		t.Fatalf("write import file: %v", err)
 	}
 
-	setupInstallAgent = func(agent string) (*setup.Result, error) {
+	setupInstallAgent = func(agent string, _ string) (*setup.Result, error) {
 		return &setup.Result{Agent: agent, Destination: "/tmp/dest", Files: 1}, nil
 	}
 
@@ -3633,7 +3633,7 @@ func TestCmdSetupHyphenArgFallsBackToInteractive(t *testing.T) {
 	setupSupportedAgents = func() []setup.Agent {
 		return []setup.Agent{{Name: "codex", Description: "Codex", InstallDir: "/tmp/codex"}}
 	}
-	setupInstallAgent = func(agent string) (*setup.Result, error) {
+	setupInstallAgent = func(agent string, _ string) (*setup.Result, error) {
 		return &setup.Result{Agent: agent, Destination: "/tmp/codex", Files: 1}, nil
 	}
 	scanInputLine = func(a ...any) (int, error) {
@@ -3862,7 +3862,7 @@ func TestCommandErrorSeamsAndUncoveredBranches(t *testing.T) {
 			*p = "1"
 			return 1, nil
 		}
-		setupInstallAgent = func(string) (*setup.Result, error) {
+		setupInstallAgent = func(string, string) (*setup.Result, error) {
 			return nil, errors.New("forced setup error")
 		}
 

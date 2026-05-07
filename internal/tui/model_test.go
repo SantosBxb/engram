@@ -214,7 +214,7 @@ func TestInstallAgentCommand(t *testing.T) {
 	t.Cleanup(func() { installAgentFn = original })
 
 	t.Run("success", func(t *testing.T) {
-		installAgentFn = func(agentName string) (*setup.Result, error) {
+		installAgentFn = func(agentName string, _ string) (*setup.Result, error) {
 			if agentName != "opencode" {
 				t.Fatalf("agentName = %q", agentName)
 			}
@@ -235,7 +235,7 @@ func TestInstallAgentCommand(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		installAgentFn = func(string) (*setup.Result, error) {
+		installAgentFn = func(string, string) (*setup.Result, error) {
 			return nil, errors.New("install failed")
 		}
 
