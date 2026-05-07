@@ -2293,10 +2293,10 @@ Commands:
                      Start MCP server (stdio transport, for any AI agent)
                        --tools:   agent (15 tools), admin (4 tools), all (default, 19)
                                   Combine: --tools=agent,admin or pick individual tools
-                       --profile: dev (default), second-brain, all
+                       --profile: dev (default), mind, all
                                   Selects server instructions and type vocabulary
                        Example: engram mcp --tools=agent
-                       Example: engram mcp --profile=second-brain --tools=agent
+                       Example: engram mcp --profile=mind --tools=agent
   tui                Launch interactive terminal UI
   search <query>     Search memories [--type TYPE] [--project PROJECT] [--scope SCOPE] [--limit N]
   save <title> <msg> Save a memory  [--type TYPE] [--project PROJECT] [--scope SCOPE]
@@ -2323,7 +2323,7 @@ Commands:
                      Install/setup agent integration
                        Agents: opencode, claude-code, gemini-cli, codex, claude-desktop
                        --profile: pass a profile name to bake into the generated config
-                       Example: engram setup claude-desktop --profile=second-brain
+                       Example: engram setup claude-desktop --profile=mind
   sync               Export new memories as compressed chunk to .engram/
                          --import   Import new chunks from .engram/ into local DB
                          --status   Show sync status

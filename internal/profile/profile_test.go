@@ -16,7 +16,7 @@ func TestGet_KnownProfiles(t *testing.T) {
 		wantAllowedNil bool
 	}{
 		{"dev", false, false},
-		{"second-brain", false, true}, // unrestricted — captures any type
+		{"mind", false, true}, // unrestricted — captures any type
 		{"all", false, true},          // unrestricted
 	}
 
@@ -55,7 +55,7 @@ func TestGet_UnknownProfile(t *testing.T) {
 		t.Errorf("error message %q should mention the unknown profile name", err.Error())
 	}
 	// Error message should list valid profiles
-	for _, valid := range []string{"dev", "second-brain", "all"} {
+	for _, valid := range []string{"dev", "mind", "all"} {
 		if !strings.Contains(err.Error(), valid) {
 			t.Errorf("error message %q should list valid profile %q", err.Error(), valid)
 		}
@@ -86,16 +86,16 @@ func TestHasType_DevProfile(t *testing.T) {
 	}
 }
 
-func TestHasType_SecondBrainProfile_Unrestricted(t *testing.T) {
-	sb, err := profile.Get("second-brain")
+func TestHasType_MindProfile_Unrestricted(t *testing.T) {
+	sb, err := profile.Get("mind")
 	if err != nil {
-		t.Fatalf("Get(second-brain): %v", err)
+		t.Fatalf("Get(mind): %v", err)
 	}
 
-	// second-brain has AllowedTypes == nil — HasType must always return true
+	// mind has AllowedTypes == nil — HasType must always return true
 	for _, typ := range []string{"idea", "goal", "bugfix", "architecture", "anything", "custom"} {
 		if !sb.HasType(typ) {
-			t.Errorf("second-brain.HasType(%q) = false, want true (AllowedTypes is nil)", typ)
+			t.Errorf("mind.HasType(%q) = false, want true (AllowedTypes is nil)", typ)
 		}
 	}
 }
@@ -119,7 +119,7 @@ func TestHasType_AllProfile_AlwaysTrue(t *testing.T) {
 func TestList_ReturnsAllProfiles(t *testing.T) {
 	names := profile.List()
 
-	wantNames := map[string]bool{"dev": true, "second-brain": true, "all": true}
+	wantNames := map[string]bool{"dev": true, "mind": true, "all": true}
 	if len(names) != len(wantNames) {
 		t.Errorf("List() returned %d names, want %d: %v", len(names), len(wantNames), names)
 	}
@@ -156,19 +156,19 @@ func TestDev_ServerInstructionsNotEmpty(t *testing.T) {
 	}
 }
 
-func TestSecondBrain_HasToolDescriptions(t *testing.T) {
-	sb, err := profile.Get("second-brain")
+func TestMind_HasToolDescriptions(t *testing.T) {
+	sb, err := profile.Get("mind")
 	if err != nil {
-		t.Fatalf("Get(second-brain): %v", err)
+		t.Fatalf("Get(mind): %v", err)
 	}
 	for _, tool := range []string{"mem_save", "mem_search"} {
 		desc, ok := sb.ToolDescriptions[tool]
 		if !ok {
-			t.Errorf("second-brain.ToolDescriptions missing key %q", tool)
+			t.Errorf("mind.ToolDescriptions missing key %q", tool)
 			continue
 		}
 		if strings.TrimSpace(desc) == "" {
-			t.Errorf("second-brain.ToolDescriptions[%q] is empty", tool)
+			t.Errorf("mind.ToolDescriptions[%q] is empty", tool)
 		}
 	}
 }

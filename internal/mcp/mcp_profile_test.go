@@ -173,9 +173,9 @@ func TestHandleSave_NoTypeWarning_NilProfile(t *testing.T) {
 // TestToolDescription_Override verifies that toolDescription returns the profile
 // override when the profile has an entry for the tool name.
 func TestToolDescription_Override(t *testing.T) {
-	sbProfile, err := profile.Get("second-brain")
+	sbProfile, err := profile.Get("mind")
 	if err != nil {
-		t.Fatalf("profile.Get(second-brain): %v", err)
+		t.Fatalf("profile.Get(mind): %v", err)
 	}
 
 	cfg := MCPConfig{Profile: sbProfile}
@@ -194,15 +194,15 @@ func TestToolDescription_Override(t *testing.T) {
 // TestToolDescription_NoOverride verifies that toolDescription falls back to the
 // default when the profile has no entry for the tool name.
 func TestToolDescription_NoOverride(t *testing.T) {
-	sbProfile, err := profile.Get("second-brain")
+	sbProfile, err := profile.Get("mind")
 	if err != nil {
-		t.Fatalf("profile.Get(second-brain): %v", err)
+		t.Fatalf("profile.Get(mind): %v", err)
 	}
 
 	cfg := MCPConfig{Profile: sbProfile}
 	const defaultDesc = "default description for mem_update"
 
-	// mem_update has no override in SecondBrain
+	// mem_update has no override in Mind
 	got := toolDescription(cfg, "mem_update", defaultDesc)
 	if got != defaultDesc {
 		t.Errorf("toolDescription without override: got %q, want %q", got, defaultDesc)
@@ -220,14 +220,14 @@ func TestToolDescription_NilProfile(t *testing.T) {
 	}
 }
 
-// TestNewServerWithConfig_SecondBrainDescriptionOverride verifies that creating
-// a server with the second-brain profile causes mem_save to be registered with
+// TestNewServerWithConfig_MindDescriptionOverride verifies that creating
+// a server with the mind profile causes mem_save to be registered with
 // the profile's description override.
-func TestNewServerWithConfig_SecondBrainDescriptionOverride(t *testing.T) {
+func TestNewServerWithConfig_MindDescriptionOverride(t *testing.T) {
 	s := newMCPTestStore(t)
-	sbProfile, err := profile.Get("second-brain")
+	sbProfile, err := profile.Get("mind")
 	if err != nil {
-		t.Fatalf("profile.Get(second-brain): %v", err)
+		t.Fatalf("profile.Get(mind): %v", err)
 	}
 
 	srv := NewServerWithConfig(s, MCPConfig{Profile: sbProfile}, nil)
@@ -280,18 +280,18 @@ func TestNewServerWithActivity_DevProfile_BackwardCompat(t *testing.T) {
 	}
 }
 
-func TestNewServerWithActivity_SecondBrainProfile_DifferentInstructions(t *testing.T) {
-	sbProfile, err := profile.Get("second-brain")
+func TestNewServerWithActivity_MindProfile_DifferentInstructions(t *testing.T) {
+	sbProfile, err := profile.Get("mind")
 	if err != nil {
-		t.Fatalf("profile.Get(second-brain): %v", err)
+		t.Fatalf("profile.Get(mind): %v", err)
 	}
 
-	// SecondBrain must differ from the dev const
+	// Mind must differ from the dev const
 	if sbProfile.ServerInstructions == serverInstructions {
-		t.Error("second-brain.ServerInstructions must differ from the dev const serverInstructions")
+		t.Error("mind.ServerInstructions must differ from the dev const serverInstructions")
 	}
 	if strings.TrimSpace(sbProfile.ServerInstructions) == "" {
-		t.Error("second-brain.ServerInstructions must not be empty")
+		t.Error("mind.ServerInstructions must not be empty")
 	}
 }
 

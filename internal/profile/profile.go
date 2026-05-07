@@ -7,7 +7,7 @@
 //  3. ToolDescriptions — per-tool description overrides so tool vocabulary matches
 //     the audience's mental model (e.g. "memories" instead of "bugs/decisions").
 //
-// Built-in profiles: "dev", "second-brain", "all".
+// Built-in profiles: "dev", "mind", "all".
 // Default when no --profile flag is given: "dev" (backward compatible).
 package profile
 
@@ -15,7 +15,7 @@ import "fmt"
 
 // Profile holds the runtime configuration for a single named audience profile.
 type Profile struct {
-	// Name is the canonical CLI name (e.g. "dev", "second-brain", "all").
+	// Name is the canonical CLI name (e.g. "dev", "mind", "all").
 	Name string
 
 	// AllowedTypes lists the observation types recommended for this profile.
@@ -33,7 +33,7 @@ type Profile struct {
 	ToolDescriptions map[string]string
 
 	// SetupTargets lists the setup agent targets that produce a config for this
-	// profile (e.g. ["claude-desktop"] for second-brain).
+	// profile (e.g. ["claude-desktop"] for mind).
 	SetupTargets []string
 }
 
@@ -127,15 +127,15 @@ var Dev = Profile{
 	SetupTargets:       nil,
 }
 
-// SecondBrain is a profile for personal knowledge management.
+// Mind is a profile for personal knowledge management.
 // AllowedTypes is nil — no restriction. The type field is free-form so Claude
 // can organically assign whatever type fits the memory (idea, goal, meeting,
 // recipe, person, etc.). The value is in the serverInstructions, not in type
 // enforcement.
-var SecondBrain = Profile{
-	Name:         "second-brain",
+var Mind = Profile{
+	Name:         "mind",
 	AllowedTypes: nil,
-	ServerInstructions: `Engram is your second brain — persistent memory that survives across conversations.
+	ServerInstructions: `Engram is your personal mind — persistent memory that survives across conversations.
 
 You remember EVERYTHING the user shares: ideas, goals, people, decisions, learnings, plans, reflections, references, meetings, habits — anything worth recalling later.
 
@@ -193,12 +193,12 @@ IF judgment_required IS TRUE:
 
 Before ending any conversation, call mem_session_summary with what was discussed, what was decided, and what's next. This is NOT optional.`,
 	ToolDescriptions: map[string]string{
-		"mem_save": `Save a memory to your second brain. Call this PROACTIVELY whenever something worth remembering comes up — ideas, decisions, goals, people, learnings, references, reflections, plans, or anything the user would want to recall later.
+		"mem_save": `Save a memory to your personal mind. Call this PROACTIVELY whenever something worth remembering comes up — ideas, decisions, goals, people, learnings, references, reflections, plans, or anything the user would want to recall later.
 
 TITLE: short and searchable (e.g. "Goal: learn Go by March", "Meeting with Ana about the house").
 TYPE: any descriptive word that fits (idea, goal, decision, person, meeting, reference, learning, reflection, habit, plan, project, bookmark, journal).
 CONTENT: structured as **What** / **Context** / **Takeaway**.`,
-		"mem_search": `Search your second brain to recall past memories, ideas, people, decisions, or anything saved in previous conversations.
+		"mem_search": `Search your personal mind to recall past memories, ideas, people, decisions, or anything saved in previous conversations.
 
 ALWAYS search before saying you don't remember. Your memory knows more about the user than your training data.`,
 	},
@@ -217,25 +217,25 @@ var All = Profile{
 }
 
 // Get returns the built-in profile for the given name.
-// Valid names are "dev", "second-brain", and "all".
+// Valid names are "dev", "mind", and "all".
 // Returns a non-nil error for any other name.
 func Get(name string) (*Profile, error) {
 	switch name {
 	case "dev":
 		p := Dev
 		return &p, nil
-	case "second-brain":
-		p := SecondBrain
+	case "mind":
+		p := Mind
 		return &p, nil
 	case "all":
 		p := All
 		return &p, nil
 	default:
-		return nil, fmt.Errorf("unknown profile %q — valid profiles: dev, second-brain, all", name)
+		return nil, fmt.Errorf("unknown profile %q — valid profiles: dev, mind, all", name)
 	}
 }
 
 // List returns the names of all built-in profiles.
 func List() []string {
-	return []string{"dev", "second-brain", "all"}
+	return []string{"dev", "mind", "all"}
 }

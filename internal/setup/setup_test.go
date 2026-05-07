@@ -2965,16 +2965,16 @@ func TestInstallClaudeDesktop_WritesConfigFile(t *testing.T) {
 	}
 }
 
-func TestInstallClaudeDesktop_WithSecondBrainProfile_IncludesProfileArg(t *testing.T) {
+func TestInstallClaudeDesktop_WithMindProfile_IncludesProfileArg(t *testing.T) {
 	resetSetupSeams(t)
 	runtimeGOOS = "darwin"
 
 	useTestHome(t)
 	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
 
-	result, err := installClaudeDesktop("second-brain")
+	result, err := installClaudeDesktop("mind")
 	if err != nil {
-		t.Fatalf("installClaudeDesktop(second-brain): %v", err)
+		t.Fatalf("installClaudeDesktop(mind): %v", err)
 	}
 
 	data, err := os.ReadFile(result.Destination)
@@ -2997,11 +2997,11 @@ func TestInstallClaudeDesktop_WithSecondBrainProfile_IncludesProfileArg(t *testi
 		t.Fatalf("parse engram entry: %v", err)
 	}
 
-	// args must include --profile=second-brain
+	// args must include --profile=mind
 	rawArgs, _ := json.Marshal(engramEntry["args"])
 	argsStr := string(rawArgs)
-	if !strings.Contains(argsStr, "--profile=second-brain") {
-		t.Errorf("engram args %s should include \"--profile=second-brain\"", argsStr)
+	if !strings.Contains(argsStr, "--profile=mind") {
+		t.Errorf("engram args %s should include \"--profile=mind\"", argsStr)
 	}
 }
 
@@ -3134,9 +3134,9 @@ func TestInstall_ClaudeDesktop_RoutesThroughInstall(t *testing.T) {
 	useTestHome(t)
 	osExecutable = func() (string, error) { return "/usr/local/bin/engram", nil }
 
-	result, err := Install("claude-desktop", "second-brain")
+	result, err := Install("claude-desktop", "mind")
 	if err != nil {
-		t.Fatalf("Install(claude-desktop, second-brain): %v", err)
+		t.Fatalf("Install(claude-desktop, mind): %v", err)
 	}
 	if result.Agent != "claude-desktop" {
 		t.Errorf("result.Agent = %q, want \"claude-desktop\"", result.Agent)
