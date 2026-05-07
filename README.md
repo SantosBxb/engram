@@ -3,18 +3,18 @@
 </p>
 
 <p align="center">
-  <strong>Persistent memory for AI coding agents</strong><br>
-  <em>One brain. Local or cloud. Agent-agnostic, single binary, zero dependencies.</em>
+  <strong>Persistent memory for AI coding agents — and for your life</strong><br>
+  <em>One brain. Multiple profiles. Local or cloud. Agent-agnostic, single binary, zero dependencies.</em>
 </p>
 
 <p align="center">
-  <a href="docs/INSTALLATION.md">Installation</a> &bull;
+  <a href="#about-this-fork">About this fork</a> &bull;
+  <a href="#install-this-fork">Install</a> &bull;
+  <a href="#profiles">Profiles</a> &bull;
+  <a href="docs/INSTALLATION.md">Upstream Install</a> &bull;
   <a href="docs/engram-cloud/README.md">Engram Cloud</a> &bull;
   <a href="docs/AGENT-SETUP.md">Agent Setup</a> &bull;
-  <a href="docs/CODEBASE-GUIDE.md">Codebase Guide</a> &bull;
   <a href="docs/ARCHITECTURE.md">Architecture</a> &bull;
-  <a href="docs/PLUGINS.md">Plugins</a> &bull;
-  <a href="CONTRIBUTING.md">Contributing</a> &bull;
   <a href="DOCS.md">Full Docs</a>
 </p>
 
@@ -34,17 +34,47 @@ Engram (single Go binary)
 SQLite + FTS5 (~/.engram/engram.db)
 ```
 
-## Quick Start
+## About This Fork
 
-### Install
+This is a fork of [Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram) that adds a **profiles system**. Profiles let Engram adapt its MCP personality to different audiences — without changing the data layer, database, or sync.
+
+| What changes | What stays the same |
+|---|---|
+| Server instructions per profile | SQLite database (`~/.engram/engram.db`) |
+| Tool descriptions adapted to audience | All 19 MCP tools |
+| Soft type recommendations per profile | CLI, TUI, HTTP API, Cloud, Git Sync |
+| `--profile` flag on `engram mcp` and `engram setup` | Full backward compatibility (`dev` = default) |
+
+**If you use `--profile=dev` (the default), this fork behaves identically to upstream.** You can replace the official binary with this one and everything works the same.
+
+## Install This Fork
+
+This fork is not published to Homebrew. Install from source:
 
 ```bash
-brew install gentleman-programming/tap/engram
+# Clone this fork
+git clone https://github.com/SantosBxb/engram.git engram-profiles
+cd engram-profiles
+
+# Build the binary
+go build -ldflags="-X main.version=profiles-$(git describe --tags --always)" -o engram ./cmd/engram
+
+# Move to a location in your PATH
+sudo mv engram /usr/local/bin/engram
 ```
 
-Windows, Linux, and other install methods → [docs/INSTALLATION.md](docs/INSTALLATION.md)
+> **Coexistence with the official version**: if you want to keep both binaries, name this one differently:
+> ```bash
+> go build -ldflags="-X main.version=profiles-$(git describe --tags --always)" -o engram-profiles ./cmd/engram
+> sudo mv engram-profiles /usr/local/bin/engram-profiles
+> ```
+> Then use `engram-profiles mcp --profile=mind` in your agent configs instead of `engram mcp`.
+
+**Requirements**: Go 1.24+ to build. No runtime dependencies.
 
 ### Setup Your Agent
+
+**Default (dev profile — same as upstream):**
 
 | Agent | One-liner |
 |-------|-----------|
@@ -54,6 +84,13 @@ Windows, Linux, and other install methods → [docs/INSTALLATION.md](docs/INSTAL
 | Codex | `engram setup codex` |
 | VS Code | `code --add-mcp '{"name":"engram","command":"engram","args":["mcp"]}'` |
 | Cursor / Windsurf / Any MCP | See [docs/AGENT-SETUP.md](docs/AGENT-SETUP.md) |
+
+**Mind profile (personal knowledge management):**
+
+| Agent | Setup |
+|-------|-------|
+| Claude Desktop | `engram setup claude-desktop --profile=mind` |
+| Any MCP client | Point to: `engram mcp --profile=mind` |
 
 Full per-agent config, Memory Protocol, and compaction survival → [docs/AGENT-SETUP.md](docs/AGENT-SETUP.md)
 
@@ -69,6 +106,39 @@ That's it. No Node.js, no Python, no Docker. **One binary, one SQLite file.**
 ```
 
 Full details on session lifecycle, topic keys, and memory hygiene → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## Profiles
+
+Profiles control how Engram presents itself to the AI agent — different instructions, vocabulary, and type guidance — without changing the underlying data.
+
+| Profile | Audience | Type guidance | Description |
+|---------|----------|---------------|-------------|
+| `dev` | Software engineers | `bugfix`, `architecture`, `decision`, `pattern`, ... | Default. Identical to upstream Engram. Coding-first vocabulary. |
+| `mind` | Personal knowledge | Free-form (no restriction) | Second brain. Captures ideas, goals, people, reflections, habits — anything worth remembering. |
+| `all` | Power users | Free-form (no restriction) | Dev instructions with no type filtering. Cross-domain without guidance friction. |
+
+### Usage
+
+```bash
+# Default — dev profile (backward compatible)
+engram mcp
+
+# Personal knowledge management
+engram mcp --profile=mind
+
+# Unrestricted
+engram mcp --profile=all
+```
+
+### What a profile changes
+
+A profile controls three things at the MCP layer:
+
+1. **ServerInstructions** — the system prompt injected into the agent. `mind` tells the agent to proactively capture ideas, people, goals; `dev` tells it to save bugfixes, decisions, architecture.
+2. **ToolDescriptions** — per-tool description overrides. `mind` rewrites `mem_save` as "save a memory to your personal mind" instead of "save an observation".
+3. **AllowedTypes** — soft type recommendations. `dev` suggests `bugfix`, `architecture`, etc. `mind` accepts any type. Violations produce a warning, not an error.
+
+All profiles share the same SQLite database. A memory saved with `--profile=mind` is searchable from `--profile=dev` and vice versa.
 
 ## MCP Tools (19)
 
